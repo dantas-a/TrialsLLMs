@@ -11,7 +11,7 @@ def compute_metrics(pred_res):
     
     positive_class_probs = probabilities[:,1]
     
-    auc = np.round(auc_score.compute(predictions_scores=positive_class_probs, references=labels)['roc_auc'],3)
+    auc = np.round(auc_score.compute(prediction_scores=positive_class_probs, references=labels)['roc_auc'],3)
     
     predicted_classes = np.argmax(predictions, axis=1)
     acc = np.round(accuracy.compute(predictions=predicted_classes,references=labels)['accuracy'],3)
