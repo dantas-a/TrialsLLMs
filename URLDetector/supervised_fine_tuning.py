@@ -1,7 +1,6 @@
 from datasets import load_dataset, DatasetDict, Dataset
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
 from utils import compute_metrics
-import numpy as np
 from transformers import DataCollatorWithPadding
 
 # load the dataset

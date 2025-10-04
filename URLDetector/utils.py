@@ -1,4 +1,5 @@
 import evaluate
+import numpy as np
 
 def compute_metrics(pred_res):
     accuracy = evaluate.load("accuracy")
