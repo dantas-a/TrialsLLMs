@@ -53,5 +53,48 @@ class PositionalEncoding(nn.Module):
         # So we recover the length of the sentence first positional encoding, and we add them to x
         x = x + (self.positional_encoding[:, :x.shape[1], :]).requires_grad_(False)
         return self.dropout(x)
+    
+# Now we will have to code the encoder and the decoder.
+# However, if we look closely at the architecture of the transformer, we can see that they introduce a normalization layer.
+class LayerNormalization(nn.Module): 
+    def __init__(self, epsilon: float = 10**(-6)) -> None :
+        super().__init__()
+        # Epsilon is used for numerical stability
+        self.epsilon = epsilon
+        # Alpha and Bias will allows to scale and shift
+        self.alpha = nn.Parameter(torch.ones(1))
+        self.bias = nn.Parameter(torch.zeros(1))
         
+    def forward(self,x):
+        # In x, we have for each word its embedding
+        # So we calculate the mean for each word and we substract the mean of each word to its embedding
+        x_centered = x - torch.mean(x, dim=-1,keepdim=True)
+        # Then we will divide by its standard deviation (epsilon is added so that we don't divide by a number close to 0)
+        div_term = 1 / torch.sqrt(torch.var(x,dim=-1,keepdim=True) + self.epsilon)
         
+        return (x_centered * div_term) * self.alpha + self.bias
+
+# After the First Normalization Layer in the encoder, we can see that there is a Layer Named Feed Forward layer  
+# We will use the parameters from the paper to code it   
+class FeedForwardLayer(nn.Module):
+    def __init__(self, d_model: int, inner_layer_size: int, dropout: float) -> None:
+        super().__init__()
+        # The layer maps input vectors of size d_model through a hidden layer of size inner_layer_size, then back to d_model.
+        self.input_layer = nn.Linear(d_model,inner_layer_size)
+        self.dropout = nn.Dropout(dropout)
+        self.output_layer = nn.Linear(inner_layer_size,d_model)
+        
+    def forward(self,x):
+        # Here we go through the first layer, then we use the relu function to replace all the negative values by 0.
+        # We use the dropout to prevent overfitting by randomly nullifying outputs from neurons during the training.
+        x = self.dropout(torch.relu(self.input_layer(x)))
+        # Finally we go to the output layer to return to the original dimension
+        x = self.output_layer(x)
+        return x
+        
+# Now that we have the normalization and feed-forward layers, we can focus on the multi-head attention mechanism.
+# Multi-head attention is a key component of the Transformer architecture.
+# For example, in the sentence "The cat is sleeping on the couch", the model does not inherently understand the relationships between the words.
+# With (non-masked) attention, the word "cat" can attend to other words in the sentence and adjust its embedding to better reflect its contextual meaning.
+# With masked attention, however, when processing the word "on", the model can only attend to the words that come before it, 
+# ensuring that it does not look ahead at future words (as needed in language generation tasks).
