@@ -98,3 +98,68 @@ class FeedForwardLayer(nn.Module):
 # With (non-masked) attention, the word "cat" can attend to other words in the sentence and adjust its embedding to better reflect its contextual meaning.
 # With masked attention, however, when processing the word "on", the model can only attend to the words that come before it, 
 # ensuring that it does not look ahead at future words (as needed in language generation tasks).
+class MultiHeadAttentionLayer(nn.Module):
+    
+    def __init__(self, d_model: int, nb_heads: int, dropout: float ) -> None:
+        super().__init__()
+        self.d_model = d_model
+        self.nb_heads = nb_heads
+        assert d_model % nb_head == 0, "d_model has to be divisible by nb_heads"
+        
+        self.proj_size = d_model // nb_heads
+        self.query_layer = nn.Linear(d_model,d_model)
+        self.key_layer = nn.Linear(d_model,d_model)
+        self.value_layer = nn.Linear(d_model,d_model)
+        
+        
+    # How do we calculate attention?
+    # In the case of Single-Head Attention, we start by computing the query for each embedding: embedding * W_Q
+    # Then, we compute the key for each embedding: embedding * W_K
+    # For non-masked attention, we calculate the dot product between every query and every key.
+    # This gives us a matrix of shape (sequence_length, sequence_length), which we usually scale by 1 / sqrt(d_k),
+    # where d_k is the dimensionality of the key and query vectors (i.e., the projection size in W_Q and W_K).
+    # Next, we apply the softmax function to each row of this matrix (i.e., across all keys for a given query)
+    # to obtain the Attention Matrix.
+    # Then, we compute the value for each embedding: embedding * W_V
+    # Each row of the Attention_Matrix weights a linear combination of the value vectors,
+    # producing context-dependent representations for each token.
+    
+    # Obviously, here we are coding the Multi-Head Attention. So, we will have to adapt some elements.
+    @staticmethod
+    def attention(query, key, value, mask, dropout: nn.Dropout):
+        d_k = query.shape[-1]
+        
+        attention_matrix = (query @ key.transpose(-2,-1)) / math.sqrt(d_k)
+        
+        # NOT FINISHED
+        
+        
+    
+    
+    
+    
+    
+    def forward(self,q,k,v,mask):
+        query = self.query_layer(q) 
+        key = self.key_layer(k)
+        value = self.value_layer(v)
+        
+        # We want multi-head attention, and since we defined the query_layer as a Linear(d_model, d_model)
+        # We have to split the output into nb_heads vectors, so it will be equivalent to calculating embedding * W_Q with a matrix of size (d_model, proj_size) nb_head times
+        # the output query has the shape (Batch, nb_heads, seq_len, d_k)
+        query = query.view(query.shape[0],query.shape[1],self.nb_heads,self.proj_size).transpose(1,2)
+        # We use the same logic for the keys
+        key = key.view(key.shape[0], key.shape[1], self.nb_heads, self.proj_size).transpose(1,2)
+        # FINISH EXPLAINING THIS PART
+        value = value.view(value.shape[0], value.shape[1], self.nb_heads, self.proj_size).transpose(1,2)
+        
+        # NOT FINISHED
+        
+        
+        
+        
+        
+        
+        
+        
+        
