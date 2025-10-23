@@ -38,7 +38,6 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0,d_model,2).float() * (-math.log(10000.0) / d_model))
         
         # We have to multiply position * div_term and then apply sin or cos
-        # ADD MORE DETAILS HERE
         positional_encoding[:,0::2] = math.sin(position * div_term)
         positional_encoding[:,1::2] = math.cos(position * div_term)
         
@@ -111,6 +110,8 @@ class MultiHeadAttentionLayer(nn.Module):
         self.key_layer = nn.Linear(d_model,d_model)
         self.value_layer = nn.Linear(d_model,d_model)
         
+        self.w_o = nn.Linear(d_model,d_model)
+        self.dropout = nn.Dropout(dropout)
         
     # How do we calculate attention?
     # In the case of Single-Head Attention, we start by computing the query for each embedding: embedding * W_Q
@@ -147,15 +148,7 @@ class MultiHeadAttentionLayer(nn.Module):
               
         return (attention_matrix @ value), attention_matrix
             
-        
-        # NOT FINISHED
-        
-        
-    
-    
-    
-    
-    
+
     def forward(self,q,k,v,mask):
         query = self.query_layer(q) 
         key = self.key_layer(k)
@@ -163,16 +156,37 @@ class MultiHeadAttentionLayer(nn.Module):
         
         # We want multi-head attention, and since we defined the query_layer as a Linear(d_model, d_model)
         # We have to split the output into nb_heads vectors, so it will be equivalent to calculating embedding * W_Q with a matrix of size (d_model, proj_size) nb_head times
-        # the output query has the shape (Batch, nb_heads, seq_len, d_k)
+        # the output query has the shape (Batch, nb_heads, seq_len, proj_size)
         query = query.view(query.shape[0],query.shape[1],self.nb_heads,self.proj_size).transpose(1,2)
         # We use the same logic for the keys
         key = key.view(key.shape[0], key.shape[1], self.nb_heads, self.proj_size).transpose(1,2)
         # Here we follow what the paper recommended.
         value = value.view(value.shape[0], value.shape[1], self.nb_heads, self.proj_size).transpose(1,2)
         
-        # NOT FINISHED
+        x, self.attention_matrix = MultiHeadAttentionLayer.attention(query, key, value, mask, self.dropout)
         
+        # Here we first transpose to go back to this shape : (Batch, seq_len, nb_heads, proj_size)
+        # Then we want to concatenate for each word the vectors obtained by the different heads
+        # Finally, we have the shape (Batch, seq_len, nb_heads * proj_size) = (Batch, seq_len, d_model)
+        x = x.transpose(1,2).contiguous().view(x.shape[0],-1, self.nb_heads * self.proj_size)
         
+        # Finally, we use a last layer to compute for each word the concatenated vector and return for each word a context-aware vector.
+        return self.w_o(x)
+    
+    
+# We will now code the Residual Connections which is the part where we add the result from the attention to the embeddings and norm
+class ResidualConnection(nn.Module):
+    def __init__(self, dropout: float) -> None:
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.norm = LayerNormalization()
+        
+    def forward(self,x, sublayer):
+        # In the paper, they do self.norm(x + sublayer(x))
+        # But for efficiency, we can do it like that
+        return x + self.dropout(sublayer(self.norm(x)))
+        
+    
         
         
         
