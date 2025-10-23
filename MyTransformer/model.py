@@ -129,7 +129,24 @@ class MultiHeadAttentionLayer(nn.Module):
     def attention(query, key, value, mask, dropout: nn.Dropout):
         d_k = query.shape[-1]
         
+        # Here we calculate the attention matrix before the softmax 
         attention_matrix = (query @ key.transpose(-2,-1)) / math.sqrt(d_k)
+        
+        # Each row in `attention_matrix` corresponds to a query position, and each column corresponds to a key position.
+        # In causal (decoder) self-attention, a token should not attend to future tokens.
+        # Therefore, we mask out (set to -inf) the upper triangular part of the matrix,
+        # where the column index > row index, to prevent attention to future positions.
+        if mask is not None:
+            attention_matrix.masked_fill_(mask == 0, -1e9)
+        
+        # Apply softmax over the key dimension to obtain attention weights
+        attention_matrix = attention_matrix.softmax(dim=-1)
+        
+        if dropout is not None:
+            attention_matrix = dropout(attention_matrix)
+              
+        return (attention_matrix @ value), attention_matrix
+            
         
         # NOT FINISHED
         
@@ -150,7 +167,7 @@ class MultiHeadAttentionLayer(nn.Module):
         query = query.view(query.shape[0],query.shape[1],self.nb_heads,self.proj_size).transpose(1,2)
         # We use the same logic for the keys
         key = key.view(key.shape[0], key.shape[1], self.nb_heads, self.proj_size).transpose(1,2)
-        # FINISH EXPLAINING THIS PART
+        # Here we follow what the paper recommended.
         value = value.view(value.shape[0], value.shape[1], self.nb_heads, self.proj_size).transpose(1,2)
         
         # NOT FINISHED
