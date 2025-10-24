@@ -181,16 +181,72 @@ class ResidualConnection(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.norm = LayerNormalization()
         
+    # sublayer will take either the multihead attention or the feed forward network
     def forward(self,x, sublayer):
         # In the paper, they do self.norm(x + sublayer(x))
         # But for efficiency, we can do it like that
         return x + self.dropout(sublayer(self.norm(x)))
-        
     
+# Now it's time to build the encoder blocks by using everything we coded before
+class EncoderBlock(nn.Module):
+    def __init__(self, self_attention_layer : MultiHeadAttentionLayer, feed_forward_layer : FeedForwardLayer, dropout : float) -> None :
+        super().__init__()
+        self.self_attention_layer = self_attention_layer
+        self.feed_forward_layer = feed_forward_layer
+        self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(2)])
         
+    def forward(self, x, src_mask):
+        # Here, we create the first part of one encoder which is the multi-head attention and the residual connection
+        # So lambda x: self.self_attention_layer(x, x, x, src_mask) means that instead of sublayer it will use this function with self.norm(x) as x
+        x = self.residual_connections[0](x, lambda x: self.self_attention_layer(x, x, x, src_mask))
+        # Here we create the second part of one encoder which is the feed forward network and the residual connection
+        x = self.residual_connections[1](x, self.feed_forward_layer)
+        return x
         
+# Now that we have built one encoder block, we just need to use multiple blocks
+class Encoder(nn.Module):
+    
+    def __init__(self, layers: nn.ModuleList) -> None :
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization()
         
+    def forward(self, x, mask):
+        # Each layer will be an encoder block taking x and the mask as a value
+        for layer in self.layers:
+            x = layer(x,mask)
+        return self.norm(x)
+    
+# The next step is to focus on the decoder
+class DecoderBlock(nn.Module):
+    
+    def __init__(self, self_attention_layer : MultiHeadAttentionLayer, cross_attention_layer: MultiHeadAttentionLayer, feed_forward_layer : FeedForwardLayer, dropout : float ) -> None :
+        super().__init__()
+        self.self_attention_layer = self_attention_layer
+        self.cross_attention_layer = cross_attention_layer
+        self.feed_forward_layer = feed_forward_layer
+        # We need 3 residual connections : one for the masked self attention, one for the cross attention and one for the feed forward layer
+        self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(3)])
         
+    def forward(self, x, encoder_output, encoder_mask, decoder_mask):
+        # Step 1 : Masked Multi Head Attention
+        x = self.residual_connections[0](x, lambda x: self.self_attention_layer(x,x,x,decoder_mask))
+        # Step 2 : Cross Multi Head Attention
+        # Look for more details
+        x = self.residual_connections[1](x, lambda x: self.cross_attention_layer(x, encoder_output, encoder_output, encoder_mask))
+        # Step 3 : Feed Forward Layer
+        x = self.residual_connections[2](x,self.feed_forward_layer)
+        return x
+      
+# Now we will use multiple Decoder Blocks to build the Decoder  
+class Decoder(nn.Module):
+    
+    def __init__(self, layers: nn.ModuleList) -> None :
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization
         
-        
-        
+    def forward(self,x, encoder_output, encoder_mask, decoder_mask) :
+        for layer in self.layers :
+            x = layer(x, encoder_output, encoder_mask, decoder_mask)
+        return self.norm(x)
