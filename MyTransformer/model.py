@@ -103,7 +103,7 @@ class MultiHeadAttentionLayer(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.nb_heads = nb_heads
-        assert d_model % nb_head == 0, "d_model has to be divisible by nb_heads"
+        assert d_model % nb_heads == 0, "d_model has to be divisible by nb_heads"
         
         self.proj_size = d_model // nb_heads
         self.query_layer = nn.Linear(d_model,d_model)
