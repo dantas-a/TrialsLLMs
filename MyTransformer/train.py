@@ -72,5 +72,5 @@ def get_ds(config) :
     # Then we define the DataLoaders for the training and the test
     train_dataloader = DataLoader(train_ds, batch_size=config['batch_size'],shuffle=True)
     test_dataloader = DataLoader(test_ds,batch_size=1,shuffle=True)
-    
-    return train_dataloader, test_dataloader
+
+    return train_dataloader, test_dataloader, tokenizer_src, tokenizer_tgt
