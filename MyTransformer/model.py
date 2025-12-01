@@ -33,13 +33,13 @@ class PositionalEncoding(nn.Module):
         positional_encoding = torch.zeros(seq_len,d_model)
         
         # Create a vector of shape (number of words, 1)
-        position = torch.arange(0,seq_len, d_type=torch.float()).unsqueeze(1)
+        position = torch.arange(0,seq_len, dtype=torch.float).unsqueeze(1)
         # The original formula in the paper calculates : 1/(10000^(2i/d_model)), but we will use log space for efficiency and stability
         div_term = torch.exp(torch.arange(0,d_model,2).float() * (-math.log(10000.0) / d_model))
         
         # We have to multiply position * div_term and then apply sin or cos
-        positional_encoding[:,0::2] = math.sin(position * div_term)
-        positional_encoding[:,1::2] = math.cos(position * div_term)
+        positional_encoding[:,0::2] = torch.sin(position * div_term)
+        positional_encoding[:,1::2] = torch.cos(position * div_term)
         
         # Position Encoding will become a tensor of (1,number of words, size of embedding)
         positional_encoding = positional_encoding.unsqueeze(0)
@@ -246,7 +246,7 @@ class Decoder(nn.Module):
     def __init__(self, layers: nn.ModuleList) -> None :
         super().__init__()
         self.layers = layers
-        self.norm = LayerNormalization
+        self.norm = LayerNormalization()
         
     def forward(self,x, encoder_output, encoder_mask, decoder_mask) :
         for layer in self.layers :
