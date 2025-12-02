@@ -290,7 +290,7 @@ class Transformer(nn.Module):
     def project(self,x):
         return self.proj_layer(x)
     
-def build_transformer(src_vocab_size :int, tgt_vocab_size :int, src_seq_len: int, tgt_seq_len: int, d_model :int =512, N :int =6, h :int = 8, dropout :float =0.1, d_ff: int = 2048) :
+def build_transformer(src_vocab_size :int, tgt_vocab_size :int, src_seq_len: int, tgt_seq_len: int, d_model :int =128, N :int =4, h :int = 4, dropout :float =0.1, d_ff: int = 512) :
     # 1st Step : Create the embedding layers (src and tgt)
     src_embed = InputEmbeddings(d_model=d_model,vocab_size=src_vocab_size)
     tgt_embed = InputEmbeddings(d_model=d_model,vocab_size=tgt_vocab_size)
@@ -329,7 +329,7 @@ def build_transformer(src_vocab_size :int, tgt_vocab_size :int, src_seq_len: int
     # Initialize the parameters
     for p in transformer.parameters():
         if p.dim() > 1:
-            nn.init.xavier_uniform(p)
+            nn.init.xavier_uniform_(p)
             
     return transformer
             

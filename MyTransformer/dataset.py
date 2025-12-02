@@ -15,9 +15,9 @@ class BilingualDataset(Dataset) :
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
 
-        self.sos_token = torch.tensor([tokenizer_src.token_to_id('[SOS]')],dtype=torch.int64)
-        self.eos_token = torch.tensor([tokenizer_src.token_to_id('[EOS]')],dtype=torch.int64)
-        self.pad_token = torch.tensor([tokenizer_src.token_to_id('[PAD]')],dtype=torch.int64)
+        self.sos_token = torch.tensor([tokenizer_src.bos_id()],dtype=torch.int64)
+        self.eos_token = torch.tensor([tokenizer_src.eos_id()],dtype=torch.int64)
+        self.pad_token = torch.tensor([tokenizer_src.pad_id()],dtype=torch.int64)
 
     def __len__(self) :
         return len(self.ds)
@@ -28,8 +28,8 @@ class BilingualDataset(Dataset) :
         tgt_text = src_target_pair['translation'][self.tgt_lang]
 
         # Here we encode the src text with the src tokenizer and the tgt text with the tgt tokenizer
-        enc_input_tokens = self.tokenizer_src.encode(src_text).ids
-        dec_input_tokens = self.tokenizer_tgt.encode(tgt_text).ids
+        enc_input_tokens = self.tokenizer_src.encode(src_text, out_type=int)
+        dec_input_tokens = self.tokenizer_tgt.encode(tgt_text, out_type=int)
 
         # It is important to calculate the difference between the max length of a sequence and length of the actual sequence
         # It allows us to check if the sequence isn't too long and will allow the padding

@@ -8,10 +8,7 @@ from model import build_transformer
 from config import get_config, get_weights_file_path
 
 from datasets import load_dataset
-from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
-from tokenizers.trainers import WordLevelTrainer
-from tokenizers.pre_tokenizers import Whitespace
+import sentencepiece as spm
 
 from pathlib import Path
 
@@ -28,23 +25,22 @@ def get_or_build_tokenizer(config, ds, lang):
     tokenizer_path = Path(config['tokenizer_file'].format(lang))
     # If the tokenizer doesn't exist, we must create it
     if not Path.exists(tokenizer_path):
-        # Here we define a Tokenizer that will split a text in words and that will use the token UNK when he doesn't know a word
-        tokenizer = Tokenizer(WordLevel(unk_token='[UNK]'))
-        # Then we explicitely tell the tokenizer that the words will be separated by spaces
-        tokenizer.pre_tokenizer = Whitespace()
-        # Until this point, the tokenizer we created doesn't know the words of the vocabulary 
-        # As a matter of fact, he can't give to each word a token, we have to train it
-        # The WordLevelTrainer will go over the dataset and will create for each word a token 
-        # However, we used min_frequency = 2 meaning that only words appearing at least 2 times deserve a token
-        # And we will create specific tokens for padding, start of sequence and end of sequence
-        trainer = WordLevelTrainer(special_tokens=['[UNK]','[PAD]','[SOS]','[EOS]'], min_frequency=2)
-        tokenizer.train_from_iterator(get_all_sentences(ds,lang),trainer=trainer)
-        # Finally, we save the tokenizer, so that we can reuse it in the future
-        tokenizer.save(str(tokenizer_path))
-    else : 
-        # The tokenizer already exist so we load it
-        tokenizer = Tokenizer.from_file(str(tokenizer_path))
-    return tokenizer
+        with open(f"corpus_{lang}.txt", 'w', encoding='utf-8') as f:
+            for sentence in get_all_sentences(ds, lang):
+                f.write(sentence + '\n')
+
+        spm.SentencePieceTrainer.Train(
+            input=f'corpus_{lang}.txt',
+            model_prefix=f'bpe_{lang}',
+            vocab_size=16000,
+            model_type='bpe',
+            character_coverage=1.0,
+            pad_id=0,
+            unk_id=1,
+            bos_id=2,
+            eos_id=3
+        )
+    return spm.SentencePieceProcessor(model_file=config['tokenizer_file'].format(lang))
 
 def get_ds(config) :
     # Here we will load the dataset from hugging face
@@ -67,8 +63,8 @@ def get_ds(config) :
     max_len_tgt = 0
 
     for item in ds_raw :
-        src_ids = tokenizer_src.encode(item['translation'][config['lang_src']]).ids
-        tgt_ids = tokenizer_tgt.encode(item['translation'][config['lang_tgt']]).ids
+        src_ids = tokenizer_src.encode(item['translation'][config['lang_src']], out_type=int)
+        tgt_ids = tokenizer_tgt.encode(item['translation'][config['lang_tgt']], out_type=int)
         max_len_src = max(max_len_src,len(src_ids))
         max_len_tgt = max(max_len_tgt, len(tgt_ids))
 
@@ -85,6 +81,68 @@ def get_model(config, vocab_src_len, vocab_tgt_len) :
     model = build_transformer(vocab_src_len, vocab_tgt_len, config['seq_len'], config['seq_len'], config['d_model'])
     return model
 
+def greedy_decode(model, encoder_input, encoder_mask, tokenizer_src, tokenizer_tgt, max_len, device) :
+    sos_idx = tokenizer_tgt.bos_id()
+    eos_idx = tokenizer_tgt.eos_id()
+
+    encoder_output = model.encode(encoder_input, encoder_mask)
+
+    decoder_input = torch.empty(1,1).fill_(sos_idx).type_as(encoder_input).to(device)
+    
+    while True : 
+        if decoder_input.size(1) == max_len :
+            break
+
+        decoder_mask = causal_mask(decoder_input.size(1)).type_as(encoder_mask).to(device)
+
+        decoder_output = model.decode(decoder_input, encoder_output, encoder_mask, decoder_mask)
+
+        proj_output = model.project(decoder_output[:,-1])
+        _, next_word = torch.max(proj_output, dim=1)
+        decoder_input = torch.cat([decoder_input,torch.empty(1,1).type_as(encoder_input).fill_(next_word.item()).to(device)],dim=1)
+
+        if next_word.item() == eos_idx :
+            break
+
+    return decoder_input.squeeze(0)
+
+def run_test(model, test_dataloader, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, global_state, writer, num_examples = 5):
+    model.eval()
+
+    count = 0
+
+    source_texts = []
+    expected = []
+    predicted = []
+
+    console_width = 80
+
+    with torch.no_grad() : 
+        for batch in test_dataloader :
+            count += 1
+            encoder_input = batch['encoder_input'].to(device)
+            encoder_mask = batch['encoder_mask'].to(device)
+
+            assert encoder_input.size(0) == 1, "Batch size must be 1 for test"
+
+            model_out = greedy_decode(model, encoder_input, encoder_mask, tokenizer_src, tokenizer_tgt, max_len, device)
+
+            source_text = batch['src_text'][0]
+            target_text = batch['tgt_text'][0]
+            model_out_text = tokenizer_tgt.decode(model_out.detach().cpu().tolist())
+
+            source_texts.append(source_text)
+            expected.append(target_text)
+            predicted.append(model_out_text)
+
+            print_msg('-'*console_width)
+            print_msg(f"SOURCE: {source_text}")
+            print_msg(f"TARGET: {target_text}")
+            print_msg(F"PREDICTED: {model_out_text}")
+
+            if count == num_examples:
+                break
+            
 def train_model(config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device {device}')
@@ -93,7 +151,7 @@ def train_model(config):
 
     train_dataloader, test_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
 
-    model = get_model(config, tokenizer_src.get_vocab_size(), tokenizer_tgt.get_vocab_size()).to(device)
+    model = get_model(config, tokenizer_src.get_piece_size(), tokenizer_tgt.get_piece_size()).to(device)
 
     writer = SummaryWriter(config['experiment_name'])    
 
@@ -107,9 +165,9 @@ def train_model(config):
         state = torch.load(model_filename)
         initial_epoch = state['epoch'] + 1
         optimizer.load_state_dict(state['optimizer_state_dict'])
-        global_step = state['global_state']
+        global_step = state['global_step']
     
-    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id('[PAD]'), label_smoothing=0.1).to(device)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.pad_id(), label_smoothing=0.1).to(device)
 
     for epoch in range(initial_epoch, config['num_epochs']):
         model.train()
@@ -126,7 +184,7 @@ def train_model(config):
 
             label = batch['label'].to(device)
 
-            loss = loss_fn(proj_output.view(-1,tokenizer_tgt.get_vocab_size()), label.view(-1))
+            loss = loss_fn(proj_output.view(-1,tokenizer_tgt.get_piece_size()), label.view(-1))
             batch_iterator.set_postfix({f"loss" : f"{loss.item():6.3f}"})
 
             writer.add_scalar('train loss', loss.item(), global_step)
@@ -138,6 +196,8 @@ def train_model(config):
             optimizer.zero_grad()
 
             global_step += 1
+
+        run_test(model, test_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step, writer)
         
         model_filename = get_weights_file_path(config, f"{epoch:02d}")
         torch.save({
