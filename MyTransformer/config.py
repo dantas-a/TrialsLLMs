@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Specify here the global parameters to select the dataset, to adapt the number of epochs, the size of the batch, the sequence length and the d_model depending on yout hardware
 def get_config():
     return {
         "batch_size" : 12,
@@ -16,6 +17,7 @@ def get_config():
         "experiment_name": "runs/tmodel"
     }
 
+# Allows you to get the weights of an already trained model
 def get_weights_file_path(config, epoch: str):
     model_folder = config['model_folder']
     model_basename = config['model_filename']

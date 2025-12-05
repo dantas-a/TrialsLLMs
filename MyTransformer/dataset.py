@@ -36,7 +36,7 @@ class BilingualDataset(Dataset) :
         # The goal of the padding is to make sure that all the sequences have the same length
         # It is important to remove 2 from the result so that we can add the SOS and EOS tokens
         enc_num_padding_tokens = self.seq_len - len(enc_input_tokens) - 2
-        # Here we only remove 1, because all the generated sequences only need the SOS token
+        # Here we only remove 1, because the decoder part only needs either the SOS or the EOS token
         dec_num_padding_tokens = self.seq_len - len(dec_input_tokens) - 1
 
         # If the sequence is too long, we must raise an error

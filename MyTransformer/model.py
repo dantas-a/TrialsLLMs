@@ -48,7 +48,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('positional_encoding',positional_encoding)
         
     def forward(self,x):
-        # Here x should be (length of the sentence, size of embedding)
+        # Here x should be (batch_size, length of the sentence, size of embedding)
         # So we recover the length of the sentence first positional encoding, and we add them to x
         x = x + (self.positional_encoding[:, :x.shape[1], :]).requires_grad_(False)
         return self.dropout(x)
@@ -148,7 +148,6 @@ class MultiHeadAttentionLayer(nn.Module):
               
         return (attention_matrix @ value), attention_matrix
             
-
     def forward(self,q,k,v,mask):
         query = self.query_layer(q) 
         key = self.key_layer(k)
